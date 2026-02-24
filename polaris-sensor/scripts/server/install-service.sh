@@ -4,9 +4,9 @@ set -euo pipefail
 SERVICE_NAME="polaris-sensor"
 UNIT_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 
-# Resolve the polaris-sensor directory (one level up from this script)
+# Resolve the polaris-sensor directory (two levels up from this script)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-APP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+APP_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 VENV_PYTHON="${APP_DIR}/.venv/bin/python"
 
 if [[ ! -f "${APP_DIR}/app.py" ]]; then
