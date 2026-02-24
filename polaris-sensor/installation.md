@@ -27,14 +27,16 @@ The server starts on `http://0.0.0.0:5000`.
 
 ## Endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/polaris-sensor/api/v1/pm` | PM1.0, PM2.5, PM10 readings |
-| GET | `/polaris-sensor/api/v1/dht` | Temperature and humidity |
+| Method | Path                              | Description                 |
+| ------ | --------------------------------- | --------------------------- |
+| GET    | `/polaris-sensor/api/v1/pm`       | PM1.0, PM2.5, PM10 readings |
+| GET    | `/polaris-sensor/api/v1/dht`      | Temperature and humidity    |
+| GET    | `/polaris-sensor/api/v1/location` | Station location            |
 
 ## Example responses
 
 **GET /polaris-sensor/api/v1/pm**
+
 ```json
 {
   "pm1_0": 72,
@@ -45,6 +47,7 @@ The server starts on `http://0.0.0.0:5000`.
 ```
 
 **GET /polaris-sensor/api/v1/dht**
+
 ```json
 {
   "temperature": 28,

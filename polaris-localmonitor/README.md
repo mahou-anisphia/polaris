@@ -1,73 +1,60 @@
-# React + TypeScript + Vite
+# polaris-localmonitor
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Local web dashboard for the Polaris sensor station. Pulls live readings from `polaris-sensor` and enriches them with external weather and air quality data.
 
-Currently, two official plugins are available:
+## Tech Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- React 19 + TypeScript (strict)
+- Vite 7
+- Tailwind CSS v4
+- shadcn/ui + Radix UI
+- lucide-react
+- axios
 
-## React Compiler
+## Dashboard Cards
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+| Card | Data shown |
+|---|---|
+| **Current Weather** | OpenWeatherMap temperature, conditions, humidity, wind, visibility, pressure — plus DHT11 sensor readings as inline comparison |
+| **Air Quality** | IQAir US AQI + main pollutant — plus station PM1.0 / PM2.5 / PM10 with computed station AQI |
+| **Station Overview** | All raw sensor readings (DHT11 + PM) followed by field comparison tables (station vs API for temperature, humidity, and AQI) |
 
-## Expanding the ESLint configuration
+## Environment Variables
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+Create a `.env` file in `polaris-localmonitor/`:
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+```env
+VITE_STATION_API_ENDPOINT=<pi-ip-address>
+VITE_STATION_API_PORT=5000
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+VITE_OPENWEATHER_API_ENDPOINT=api.openweathermap.org
+VITE_OPENWEATHER_API_KEY=<your-key>
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+VITE_AQAIR_API_ENDPOINT=api.airvisual.com
+VITE_AQAIR_API_KEY=<your-key>
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Commands
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+```bash
+pnpm dev        # Start dev server on localhost:5173
+pnpm build      # TypeScript check + production build
+pnpm lint       # ESLint
+pnpm preview    # Serve production build locally
+```
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Data & Caching
+
+| Source | Cache TTL |
+|---|---|
+| OpenWeatherMap, IQAir | 5 minutes |
+| polaris-sensor (PM, DHT) | 1 minute |
+| Station location | 1 minute |
+
+Refresh button forces a new fetch bypassing the cache.
+
+## Adding shadcn Components
+
+```bash
+pnpm shadcn:add <component-name>
 ```
