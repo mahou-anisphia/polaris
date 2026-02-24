@@ -2,6 +2,7 @@ from flask import Flask
 
 from controllers.v1.pm25_controller import pm25_bp
 from controllers.v1.dht_controller import dht_bp
+from controllers.v1.location_controller import location_bp
 
 API_PREFIX = "/polaris-sensor/api"
 V1_PREFIX = f"{API_PREFIX}/v1"
@@ -12,6 +13,7 @@ def create_app():
 
     app.register_blueprint(pm25_bp, url_prefix=V1_PREFIX)
     app.register_blueprint(dht_bp, url_prefix=V1_PREFIX)
+    app.register_blueprint(location_bp, url_prefix=V1_PREFIX)
 
     return app
 
