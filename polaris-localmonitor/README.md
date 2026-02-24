@@ -13,11 +13,11 @@ Local web dashboard for the Polaris sensor station. Pulls live readings from `po
 
 ## Dashboard Cards
 
-| Card | Data shown |
-|---|---|
-| **Current Weather** | OpenWeatherMap temperature, conditions, humidity, wind, visibility, pressure — plus DHT11 sensor readings as inline comparison |
-| **Air Quality** | IQAir US AQI + main pollutant — plus station PM1.0 / PM2.5 / PM10 with computed station AQI |
-| **Station Overview** | All raw sensor readings (DHT11 + PM) followed by field comparison tables (station vs API for temperature, humidity, and AQI) |
+| Card                 | Data shown                                                                                                                     |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| **Current Weather**  | OpenWeatherMap temperature, conditions, humidity, wind, visibility, pressure — plus DHT11 sensor readings as inline comparison |
+| **Air Quality**      | IQAir US AQI + main pollutant — plus station PM1.0 / PM2.5 / PM10 with computed station AQI                                    |
+| **Station Overview** | All raw sensor readings (DHT11 + PM) followed by field comparison tables (station vs API for temperature, humidity, and AQI)   |
 
 ## Environment Variables
 
@@ -45,11 +45,11 @@ pnpm preview    # Serve production build locally
 
 ## Data & Caching
 
-| Source | Cache TTL |
-|---|---|
-| OpenWeatherMap, IQAir | 5 minutes |
-| polaris-sensor (PM, DHT) | 1 minute |
-| Station location | 1 minute |
+| Source                   | Cache TTL |
+| ------------------------ | --------- |
+| OpenWeatherMap, IQAir    | 5 minutes |
+| polaris-sensor (PM, DHT) | 1 minute  |
+| Station location         | 1 minute  |
 
 Refresh button forces a new fetch bypassing the cache.
 
@@ -58,3 +58,47 @@ Refresh button forces a new fetch bypassing the cache.
 ```bash
 pnpm shadcn:add <component-name>
 ```
+
+## Docker
+
+> **Important:** Vite bakes `VITE_*` variables into the static bundle **at build time**. They cannot be changed after the image is built — you must pass them as `--build-arg` flags during `docker build`.
+
+### Build the image
+
+```bash
+docker build \
+  --build-arg VITE_STATION_API_ENDPOINT=<pi-ip-address> \
+  --build-arg VITE_STATION_API_PORT=5000 \
+  --build-arg VITE_OPENWEATHER_API_ENDPOINT=api.openweathermap.org \
+  --build-arg VITE_OPENWEATHER_API_KEY=<your-key> \
+  --build-arg VITE_AQAIR_API_ENDPOINT=api.airvisual.com \
+  --build-arg VITE_AQAIR_API_KEY=<your-key> \
+  -t polaris-localmonitor \
+  .
+```
+
+To avoid repeating all flags you can source your `.env` file and pass its values inline:
+
+```bash
+export $(grep -v '^#' .env | xargs) && docker build \
+  --build-arg VITE_STATION_API_ENDPOINT \
+  --build-arg VITE_STATION_API_PORT \
+  --build-arg VITE_OPENWEATHER_API_ENDPOINT \
+  --build-arg VITE_OPENWEATHER_API_KEY \
+  --build-arg VITE_AQAIR_API_ENDPOINT \
+  --build-arg VITE_AQAIR_API_KEY \
+  -t polaris-localmonitor \
+  .
+```
+
+*(When a `--build-arg` is given without `=value`, Docker reads it from the current shell environment.)*
+
+### Run the container
+
+The built image serves the static files on port 80 via nginx. Map it to any host port:
+
+```bash
+docker run -d -p 8080:80 --name polaris-localmonitor polaris-localmonitor
+```
+
+Dashboard is then available at `http://localhost:8080`.
