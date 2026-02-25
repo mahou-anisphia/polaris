@@ -56,3 +56,24 @@ export function getCacheAge(key: string): Date | null {
 export function isCacheValid(key: string, ttl: number): boolean {
   return getCached(key, ttl) !== null;
 }
+
+/**
+ * Return cached value from today regardless of TTL, or null if absent or from
+ * a previous calendar day. Used as a stale-fallback when a live fetch fails.
+ */
+export function getCachedStale<T>(key: string): T | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const entry = JSON.parse(raw) as CacheEntry<T>;
+    const cached = new Date(entry.timestamp);
+    const now    = new Date();
+    const sameDay =
+      cached.getFullYear() === now.getFullYear() &&
+      cached.getMonth()    === now.getMonth()    &&
+      cached.getDate()     === now.getDate();
+    return sameDay ? entry.data : null;
+  } catch {
+    return null;
+  }
+}

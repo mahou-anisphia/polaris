@@ -9,14 +9,16 @@ import {
   RefreshCw,
   Wind,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { pm25ToAQI } from '@/lib/aqi';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchAirQuality, fetchDHT, fetchLocation, fetchPM, fetchWeather } from '@/store';
-import { CACHE_KEYS, CACHE_TTL, getCacheAge, isCacheValid } from '@/store/cache';
+import { CACHE_KEYS, CACHE_TTL, getCacheAge, getCachedStale, isCacheValid } from '@/store/cache';
 import type { AirQualityResponse } from '@/types/AQI';
 import type { OpenWeather } from '@/types/OpenWeather';
 import type { DHTMonitor, Location, PMMonitor } from '@/types/StationAPI';
@@ -73,11 +75,14 @@ function LoadingSkeleton() {
   );
 }
 
+interface DataWarning { title: string; description: string; }
+
 export default function App() {
   const [data, setData]           = useState<DashboardData | null>(null);
   const [loading, setLoading]     = useState(false);
   const [fromCache, setFromCache] = useState(false);
   const [error, setError]         = useState<string | null>(null);
+  const [warnings, setWarnings]   = useState<DataWarning[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const fetchAll = useCallback(async (force = false) => {
@@ -86,18 +91,88 @@ export default function App() {
 
     setLoading(true);
     setError(null);
+    setWarnings([]);
+
+    const toastId = force ? toast.loading('Refreshing data…') : undefined;
+    const newWarnings: DataWarning[] = [];
+
     try {
-      const location = await fetchLocation(force);
-      const [weather, airQuality, pm, dht] = await Promise.all([
+      // Location is required for the weather/AQI fetches; handle it first
+      let location: Location;
+      try {
+        location = await fetchLocation(force);
+      } catch {
+        const stale = getCachedStale<Location>(CACHE_KEYS.LOCATION);
+        if (!stale) throw new Error('Station unreachable and no cached location available');
+        newWarnings.push({ title: 'Station unreachable', description: 'Showing cached location data' });
+        location = stale;
+      }
+
+      const [weatherResult, airQualityResult, pmResult, dhtResult] = await Promise.allSettled([
         fetchWeather(location.latitude, location.longitude, force),
         fetchAirQuality(location.latitude, location.longitude, force),
         fetchPM(force),
         fetchDHT(force),
       ]);
+
+      // Weather
+      let weather: OpenWeather;
+      if (weatherResult.status === 'fulfilled') {
+        weather = weatherResult.value;
+      } else {
+        const stale = getCachedStale<OpenWeather>(CACHE_KEYS.WEATHER);
+        if (!stale) throw new Error('Weather data unavailable and no cached data found');
+        newWarnings.push({ title: 'Weather API failed', description: 'Showing cached weather data from earlier today' });
+        weather = stale;
+      }
+
+      // Air quality
+      let airQuality: AirQualityResponse;
+      if (airQualityResult.status === 'fulfilled') {
+        airQuality = airQualityResult.value;
+      } else {
+        const stale = getCachedStale<AirQualityResponse>(CACHE_KEYS.AIR_QUALITY);
+        if (!stale) throw new Error('Air quality data unavailable and no cached data found');
+        newWarnings.push({ title: 'Air quality API failed', description: 'Showing cached AQI data from earlier today' });
+        airQuality = stale;
+      }
+
+      // PM sensor
+      let pm: PMMonitor;
+      if (pmResult.status === 'fulfilled') {
+        pm = pmResult.value;
+      } else {
+        const stale = getCachedStale<PMMonitor>(CACHE_KEYS.PM);
+        if (!stale) throw new Error('PM sensor data unavailable and no cached data found');
+        newWarnings.push({ title: 'PM sensor unreachable', description: 'Showing cached sensor readings from earlier today' });
+        pm = stale;
+      }
+
+      // DHT sensor
+      let dht: DHTMonitor;
+      if (dhtResult.status === 'fulfilled') {
+        dht = dhtResult.value;
+      } else {
+        const stale = getCachedStale<DHTMonitor>(CACHE_KEYS.DHT);
+        if (!stale) throw new Error('DHT sensor data unavailable and no cached data found');
+        newWarnings.push({ title: 'DHT sensor unreachable', description: 'Showing cached sensor readings from earlier today' });
+        dht = stale;
+      }
+
       setData({ location, weather, airQuality, pm, dht });
+      setWarnings(newWarnings);
       setFromCache(weatherWasCached);
       setLastUpdated(getCacheAge(CACHE_KEYS.WEATHER) ?? new Date());
+
+      if (toastId !== undefined) {
+        if (newWarnings.length > 0) {
+          toast.warning('Refreshed with some stale data', { id: toastId });
+        } else {
+          toast.success('Data refreshed', { id: toastId });
+        }
+      }
     } catch (err) {
+      if (toastId !== undefined) toast.dismiss(toastId);
       setError(err instanceof Error ? err.message : 'Failed to fetch data');
     } finally {
       setLoading(false);
@@ -186,13 +261,14 @@ export default function App() {
           </Button>
         </div>
 
-        {/* Stale-data error banner */}
-        {error && data && (
-          <div className="flex items-center gap-2 text-sm text-destructive px-1">
-            <AlertCircle className="size-4 shrink-0" />
-            {error}
-          </div>
-        )}
+        {/* Per-source stale-data alerts */}
+        {warnings.map((w) => (
+          <Alert key={w.title} variant="destructive" className="rounded-xl">
+            <AlertCircle className="size-4" />
+            <AlertTitle>{w.title}</AlertTitle>
+            <AlertDescription>{w.description}</AlertDescription>
+          </Alert>
+        ))}
 
         {/* ── Main grid ── */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
