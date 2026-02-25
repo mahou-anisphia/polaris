@@ -3,7 +3,6 @@
 import csv
 import math
 import os
-import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,6 +10,7 @@ from pathlib import Path
 import requests
 from dotenv import load_dotenv
 
+from logger import get_logger
 from services.pm25_service import read_pm
 
 load_dotenv()
@@ -19,7 +19,8 @@ AQAIR_API_KEY = os.getenv("AQAIR_API_KEY")
 AQAIR_API_ENDPOINT = os.getenv("AQAIR_API_ENDPOINT", "api.airvisual.com")
 
 INTERVAL_SECONDS = 5 * 60
-DATA_DIR = Path(__file__).resolve().parent / "data"
+# data/ lives at the polaris-sensor root, one level above this file's directory
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 CSV_PATH = DATA_DIR / "aqi_log.csv"
 CSV_COLUMNS = ["timestamp_utc", "pm1_0", "pm2_5", "pm10", "aqi_api", "aqi_sensor"]
 
@@ -33,6 +34,8 @@ _BREAKPOINTS = [
     (250.5, 350.4, 301, 400),
     (350.5, 500.4, 401, 500),
 ]
+
+_logger = get_logger("local_logger")
 
 
 def pm25_to_aqi(pm25: float) -> int:
@@ -60,7 +63,7 @@ def get_location() -> tuple[float, float]:
 def fetch_api_aqi(lat: float, lon: float) -> int | None:
     """Call AQAir (AirVisual) API and return the US AQI value."""
     if not AQAIR_API_KEY:
-        print("  WARN: AQAIR_API_KEY not set, skipping API AQI", file=sys.stderr)
+        _logger.warning("AQAIR_API_KEY not set, skipping API AQI")
         return None
     resp = requests.get(
         f"https://{AQAIR_API_ENDPOINT}/v2/nearest_city",
@@ -89,15 +92,13 @@ def collect_once(lat: float, lon: float) -> None:
     """Run one collection cycle: read sensor, call API, write CSV row."""
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    # Local sensor
     pm = read_pm()
     aqi_sensor = pm25_to_aqi(pm["pm2_5"])
 
-    # AQAir API
     try:
         aqi_api = fetch_api_aqi(lat, lon)
     except Exception as e:
-        print(f"  WARN: AQAir API error: {e}", file=sys.stderr)
+        _logger.warning("AQAir API error: %s", e)
         aqi_api = None
 
     row = {
@@ -109,21 +110,26 @@ def collect_once(lat: float, lon: float) -> None:
         "aqi_sensor": aqi_sensor,
     }
     append_row(row)
-    print(f"  [{ts}] PM2.5={pm['pm2_5']} | AQI(sensor)={aqi_sensor} | AQI(api)={aqi_api}")
+    _logger.info(
+        "Recorded  PM2.5=%s  AQI(sensor)=%s  AQI(api)=%s",
+        pm["pm2_5"],
+        aqi_sensor,
+        aqi_api,
+    )
 
 
 def main() -> None:
     ensure_csv()
-    print(f"AQI logger started. Recording to {CSV_PATH}")
+    _logger.info("AQI logger started. Recording to %s", CSV_PATH)
 
     lat, lon = get_location()
-    print(f"Location: {lat}, {lon}")
+    _logger.info("Location resolved  lat=%s lon=%s", lat, lon)
 
     while True:
         try:
             collect_once(lat, lon)
         except Exception as e:
-            print(f"  ERROR: {e}", file=sys.stderr)
+            _logger.error("Collection cycle failed: %s", e, exc_info=True)
         time.sleep(INTERVAL_SECONDS)
 
 
