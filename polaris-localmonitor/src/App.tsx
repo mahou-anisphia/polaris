@@ -63,7 +63,7 @@ function AQIBadge({ value, className = '' }: Readonly<{ value: number; className
 
 function LoadingSkeleton() {
   return (
-    <div className="min-h-screen bg-background p-4 md:p-8">
+    <div className="min-h-screen bg-background p-4 md:p-8 overflow-x-hidden">
       <div className="max-w-5xl mx-auto space-y-5">
         <Skeleton className="h-20 w-full rounded-2xl" />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -222,7 +222,7 @@ export default function App() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-background p-4 md:p-8">
+    <div className="min-h-screen bg-background p-4 md:p-8 overflow-x-hidden">
       <div className="max-w-5xl mx-auto space-y-5">
 
         {/* ── Header ── */}
@@ -295,16 +295,19 @@ export default function App() {
                   <div className="text-xs text-muted-foreground">
                     Feels like {ow.feels_like.toFixed(1)}°C
                   </div>
-                  <div className="text-xs text-muted-foreground mt-0.5">
-                    Station {dht.temperature.toFixed(1)}°C
-                    <span className={`ml-1 ${deltaClass(dht.temperature, ow.temp)}`}>
-                      ({signedDelta(dht.temperature, ow.temp)} vs API)
-                    </span>
-                    {' · '}
-                    {dht.humidity.toFixed(0)}% RH
-                    <span className={`ml-1 ${deltaClass(dht.humidity, ow.humidity, 2, 10)}`}>
-                      ({signedDelta(dht.humidity, ow.humidity, 0)} vs API)
-                    </span>
+                  <div className="text-xs text-muted-foreground mt-0.5 space-y-0.5">
+                    <div>
+                      Station {dht.temperature.toFixed(1)}°C
+                      <span className={`ml-1 ${deltaClass(dht.temperature, ow.temp)}`}>
+                        ({signedDelta(dht.temperature, ow.temp)} vs API)
+                      </span>
+                    </div>
+                    <div>
+                      {dht.humidity.toFixed(0)}% RH
+                      <span className={`ml-1 ${deltaClass(dht.humidity, ow.humidity, 2, 10)}`}>
+                        ({signedDelta(dht.humidity, ow.humidity, 0)} vs API)
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -348,7 +351,7 @@ export default function App() {
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">PM2.5</span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap justify-end">
                     <span className="font-medium text-foreground">{pm.pm2_5} {pm.unit}</span>
                     <span className="text-xs text-muted-foreground">AQI {stationAQI}</span>
                     <AQIBadge value={stationAQI} />
@@ -380,7 +383,7 @@ export default function App() {
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">
                 Sensor Readings
               </p>
-              <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Temperature</span>
                   <span className="font-semibold text-foreground">{dht.temperature.toFixed(1)} °{dht.temperature_unit}</span>
