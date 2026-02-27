@@ -1,0 +1,118 @@
+pipeline {
+    agent any
+
+    triggers {
+        pollSCM('H/5 * * * *')
+    }
+
+    parameters {
+        choice(
+            name: 'TARGET_ARCH',
+            choices: ['arm64', 'amd64'],
+            description: 'Target architecture (default: arm64 for Pi 5)'
+        )
+    }
+
+    environment {
+        REGISTRY = '100.64.189.18:5000'
+        IMAGE_NAME = 'polaris-localmonitor'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git branch: 'main',
+                    url: 'https://github.com/mahou-anisphia/polaris'
+            }
+        }
+
+        stage('Clean Old Local Images') {
+            steps {
+                sh """
+                    docker images ${REGISTRY}/${IMAGE_NAME}-${params.TARGET_ARCH} \
+                        --format '{{.ID}}' | xargs -r docker rmi -f || true
+                """
+            }
+        }
+
+        stage('Build & Push') {
+            steps {
+                script {
+                    def commitHash = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                    def fullImage = "${REGISTRY}/${IMAGE_NAME}-${params.TARGET_ARCH}"
+
+                    withCredentials([
+                        string(credentialsId: 'aqair-api-key', variable: 'AQAIR_KEY'),
+                        string(credentialsId: 'openweather-api-key', variable: 'OW_KEY')
+                    ]) {
+                        dir('polaris-localmonitor') {
+                            sh """
+                                docker build \
+                                  --platform linux/${params.TARGET_ARCH} \
+                                  --build-arg VITE_AQAIR_API_KEY=${AQAIR_KEY} \
+                                  --build-arg VITE_AQAIR_API_ENDPOINT=api.airvisual.com \
+                                  --build-arg VITE_OPENWEATHER_API_KEY=${OW_KEY} \
+                                  --build-arg VITE_OPENWEATHER_API_ENDPOINT=api.openweathermap.org \
+                                  --build-arg VITE_STATION_API_ENDPOINT=100.104.203.114 \
+                                  --build-arg VITE_STATION_API_PORT=5000 \
+                                  -t ${fullImage}:${commitHash} \
+                                  -t ${fullImage}:latest \
+                                  .
+
+                                docker push ${fullImage}:${commitHash}
+                                docker push ${fullImage}:latest
+                            """
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Clean Old Registry Tags') {
+            steps {
+                script {
+                    def commitHash = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                    def fullImage = "${IMAGE_NAME}-${params.TARGET_ARCH}"
+
+                    sh """
+                        tags=\$(curl -s http://${REGISTRY}/v2/${fullImage}/tags/list | \
+                            python3 -c "import sys,json; tags=json.load(sys.stdin).get('tags') or []; print(' '.join(tags))")
+
+                        for tag in \$tags; do
+                            if [ "\$tag" != "latest" ] && [ "\$tag" != "${commitHash}" ]; then
+                                digest=\$(curl -s -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
+                                    -I "http://${REGISTRY}/v2/${fullImage}/manifests/\$tag" | \
+                                    grep -i Docker-Content-Digest | awk '{print \$2}' | tr -d '\\r')
+                                if [ -n "\$digest" ]; then
+                                    curl -s -X DELETE "http://${REGISTRY}/v2/${fullImage}/manifests/\$digest"
+                                    echo "Deleted old tag: \$tag (\$digest)"
+                                fi
+                            fi
+                        done
+                    """
+                }
+            }
+        }
+
+        stage('Run Registry GC') {
+            steps {
+                sh """
+                    docker exec docker-registry-registry-1 \
+                        registry garbage-collect /etc/docker/registry/config.yml --delete-untagged
+                """
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Built and pushed ${IMAGE_NAME}-${params.TARGET_ARCH}:latest"
+        }
+        failure {
+            echo "Pipeline failed — check build logs"
+        }
+        always {
+            sh "docker image prune -f || true"
+        }
+    }
+}
