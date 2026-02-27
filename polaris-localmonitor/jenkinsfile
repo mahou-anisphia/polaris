@@ -68,6 +68,31 @@ pipeline {
             }
         }
 
+        stage('Deploy') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'magicology-lab',
+                        usernameVariable: 'SSH_USER',
+                        passwordVariable: 'SSH_PASS'
+                    )
+                ]) {
+                    sh """
+                        sshpass -p '${SSH_PASS}' ssh -o StrictHostKeyChecking=no ${SSH_USER}@100.79.145.19 '
+                            docker stop polaris-localmonitor 2>/dev/null || true
+                            docker rm polaris-localmonitor 2>/dev/null || true
+                            docker pull 100.64.189.18:5000/polaris-localmonitor-arm64:latest
+                            docker run -d \
+                                --name polaris-localmonitor \
+                                --restart always \
+                                -p 8081:80 \
+                                100.64.189.18:5000/polaris-localmonitor-arm64:latest
+                        '
+                    """
+                }
+            }
+        }
+
         stage('Clean Old Registry Tags') {
             steps {
                 script {
