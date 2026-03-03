@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import {
   AlertCircle,
   Clock,
@@ -17,6 +17,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
+const CsvChart = lazy(() =>
+  import('@/components/CsvChart').then((m) => ({ default: m.CsvChart })),
+);
 import { fetchAirQuality, fetchDHT, fetchLocation, fetchPM, fetchWeather } from '@/store';
 import { CACHE_KEYS, CACHE_TTL, getCacheAge, getCachedStale, isCacheValid } from '@/store/cache';
 import type { AirQualityResponse } from '@/types/AQI';
@@ -531,6 +534,11 @@ export default function App() {
 
           </CardContent>
         </Card>
+
+        {/* ── Historical Data chart ── */}
+        <Suspense fallback={<Skeleton className="h-52 w-full rounded-2xl" />}>
+          <CsvChart />
+        </Suspense>
 
         <p className="text-xs text-center text-muted-foreground pb-4">
           Polaris Sensor Station
