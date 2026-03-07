@@ -35,9 +35,8 @@ After=network.target
 Type=simple
 User=${USER}
 WorkingDirectory=${APP_DIR}/src
+Environment=PYTHONPATH=${APP_DIR}/src
 ExecStart=${VENV_PYTHON} local_logger/aqi_logger.py
-Restart=on-failure
-RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
