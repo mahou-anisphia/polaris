@@ -19,8 +19,8 @@ AQAIR_API_KEY = os.getenv("AQAIR_API_KEY")
 AQAIR_API_ENDPOINT = os.getenv("AQAIR_API_ENDPOINT", "api.airvisual.com")
 
 INTERVAL_SECONDS = 5 * 60
-# data/ lives at the polaris-sensor root, one level above this file's directory
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+# data/ lives at the polaris-sensor root, three levels above this file's directory
+DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 CSV_PATH = DATA_DIR / "aqi_log.csv"
 CSV_COLUMNS = ["timestamp_utc", "pm1_0", "pm2_5", "pm10", "aqi_api", "aqi_sensor"]
 

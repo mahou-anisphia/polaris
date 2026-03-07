@@ -25,7 +25,7 @@ pnpm preview    # Preview production build
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-python app.py   # Start Flask on 0.0.0.0:5000
+python src/app.py   # Start Flask on 0.0.0.0:5000
 ```
 
 ## Architecture
@@ -34,9 +34,11 @@ python app.py   # Start Flask on 0.0.0.0:5000
 
 Flask app with a versioned Blueprint structure:
 
-- `app.py` — Creates Flask app, registers `/polaris-sensor/api/v1` blueprints
-- `controllers/v1/` — Route handlers; `pm25_controller.py` and `dht_controller.py`
-- `services/` — Hardware interface layer; `pm25_service.py` (I2C bus 1, address `0x19`, reads registers `0x06–0x11` as little-endian uint16) and `dht_service.py` (GPIO pin D4, DHT11)
+- `src/app.py` — Creates Flask app, registers `/polaris-sensor/api/v1` blueprints
+- `src/controllers/v1/` — Route handlers; `pm25_controller.py` and `dht_controller.py`
+- `src/services/` — Hardware interface layer; `pm25_service.py` (I2C bus 1, address `0x19`, reads registers `0x06–0x11` as little-endian uint16) and `dht_service.py` (GPIO pin D4, DHT11)
+- `src/local_logger/aqi_logger.py` — Standalone CSV recorder (runs as separate systemd service)
+- `data/` — CSV output directory (gitignored, created at runtime outside `src/`)
 
 **API endpoints:**
 

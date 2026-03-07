@@ -72,7 +72,7 @@ sudo raspi-config  # Interface Options → I2C → Enable
 ## Run
 
 ```bash
-python app.py
+python src/app.py
 ```
 
 Server starts on `http://0.0.0.0:5000`.
@@ -82,7 +82,7 @@ Server starts on `http://0.0.0.0:5000`.
 Installs and starts a systemd unit so the API runs on boot:
 
 ```bash
-bash scripts/install-service.sh
+bash scripts/server/install-service.sh
 ```
 
 Useful commands after install:
@@ -95,5 +95,5 @@ sudo journalctl -u polaris-sensor -f
 To remove the service:
 
 ```bash
-bash scripts/uninstall-service.sh
+bash scripts/server/uninstall-service.sh
 ```

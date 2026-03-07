@@ -10,8 +10,8 @@ APP_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 VENV_PYTHON="${APP_DIR}/.venv/bin/python"
 CSV_PATH="${APP_DIR}/data/aqi_log.csv"
 
-if [[ ! -f "${APP_DIR}/local_logger/aqi_logger.py" ]]; then
-    echo "ERROR: local_logger/aqi_logger.py not found in ${APP_DIR}" >&2
+if [[ ! -f "${APP_DIR}/src/local_logger/aqi_logger.py" ]]; then
+    echo "ERROR: src/local_logger/aqi_logger.py not found in ${APP_DIR}" >&2
     exit 1
 fi
 
@@ -34,7 +34,7 @@ After=network.target
 [Service]
 Type=simple
 User=${USER}
-WorkingDirectory=${APP_DIR}
+WorkingDirectory=${APP_DIR}/src
 ExecStart=${VENV_PYTHON} local_logger/aqi_logger.py
 Restart=on-failure
 RestartSec=10

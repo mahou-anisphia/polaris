@@ -20,7 +20,7 @@ pip install -r requirements.txt
 ## Run
 
 ```bash
-python app.py
+python src/app.py
 ```
 
 The server starts on `http://0.0.0.0:5000`.

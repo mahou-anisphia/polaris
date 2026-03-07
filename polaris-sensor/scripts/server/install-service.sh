@@ -9,8 +9,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 VENV_PYTHON="${APP_DIR}/.venv/bin/python"
 
-if [[ ! -f "${APP_DIR}/app.py" ]]; then
-    echo "ERROR: app.py not found in ${APP_DIR}" >&2
+if [[ ! -f "${APP_DIR}/src/app.py" ]]; then
+    echo "ERROR: src/app.py not found in ${APP_DIR}" >&2
     exit 1
 fi
 
@@ -33,7 +33,7 @@ After=network.target
 [Service]
 Type=simple
 User=${USER}
-WorkingDirectory=${APP_DIR}
+WorkingDirectory=${APP_DIR}/src
 ExecStart=${VENV_PYTHON} app.py
 Restart=on-failure
 RestartSec=5
