@@ -8,10 +8,12 @@ from flask_cors import CORS
 from controllers.v1.pm25_controller import pm25_bp
 from controllers.v1.dht_controller import dht_bp
 from controllers.v1.location_controller import location_bp
+from controllers.v2.location_controller import location_v2_bp
 from logger import get_logger
 
 API_PREFIX = "/polaris-sensor/api"
 V1_PREFIX = f"{API_PREFIX}/v1"
+V2_PREFIX = f"{API_PREFIX}/v2"
 
 _logger = get_logger("app")
 
@@ -23,6 +25,7 @@ def create_app():
     app.register_blueprint(pm25_bp, url_prefix=V1_PREFIX)
     app.register_blueprint(dht_bp, url_prefix=V1_PREFIX)
     app.register_blueprint(location_bp, url_prefix=V1_PREFIX)
+    app.register_blueprint(location_v2_bp, url_prefix=V2_PREFIX)
 
     @app.before_request
     def _before():

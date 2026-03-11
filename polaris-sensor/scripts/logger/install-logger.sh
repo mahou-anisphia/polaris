@@ -21,6 +21,79 @@ if [[ ! -x "${VENV_PYTHON}" ]]; then
     exit 1
 fi
 
+# ---------------------------------------------------------------------------
+# Env setup: manual entry or import from file
+# ---------------------------------------------------------------------------
+ENV_FILE="${APP_DIR}/.env"
+echo ""
+echo "Environment setup"
+echo "  (a) Enter values manually"
+echo "  (b) Import from an existing .env file"
+echo "  (s) Skip — I will configure .env myself"
+echo ""
+read -rp "Choose [a/b/s]: " ENV_CHOICE
+
+case "${ENV_CHOICE}" in
+    a|A)
+        read -rp "AQAIR_API_KEY: " INPUT_API_KEY
+        read -rp "AQAIR_API_ENDPOINT [default: api.airvisual.com]: " INPUT_ENDPOINT
+        INPUT_ENDPOINT="${INPUT_ENDPOINT:-api.airvisual.com}"
+
+        if [[ -z "${INPUT_API_KEY}" ]]; then
+            echo "ERROR: AQAIR_API_KEY is required." >&2
+            exit 1
+        fi
+
+        touch "${ENV_FILE}"
+        for KEY in AQAIR_API_KEY AQAIR_API_ENDPOINT; do
+            sed -i "/^${KEY}=/d" "${ENV_FILE}"
+        done
+        {
+            echo "AQAIR_API_KEY=${INPUT_API_KEY}"
+            echo "AQAIR_API_ENDPOINT=${INPUT_ENDPOINT}"
+        } >> "${ENV_FILE}"
+        echo "Written to ${ENV_FILE}"
+        ;;
+
+    b|B)
+        read -rp "Path to .env file: " IMPORT_PATH
+        IMPORT_PATH="${IMPORT_PATH/#\~/$HOME}"
+
+        if [[ ! -f "${IMPORT_PATH}" ]]; then
+            echo "ERROR: File not found: ${IMPORT_PATH}" >&2
+            exit 1
+        fi
+
+        API_KEY_VAL=$(grep -E '^AQAIR_API_KEY=' "${IMPORT_PATH}" | head -1 | cut -d= -f2- || true)
+        ENDPOINT_VAL=$(grep -E '^AQAIR_API_ENDPOINT=' "${IMPORT_PATH}" | head -1 | cut -d= -f2- || true)
+
+        if [[ -z "${API_KEY_VAL}" ]]; then
+            echo "ERROR: AQAIR_API_KEY is missing from ${IMPORT_PATH}" >&2
+            exit 1
+        fi
+        ENDPOINT_VAL="${ENDPOINT_VAL:-api.airvisual.com}"
+
+        touch "${ENV_FILE}"
+        for KEY in AQAIR_API_KEY AQAIR_API_ENDPOINT; do
+            sed -i "/^${KEY}=/d" "${ENV_FILE}"
+        done
+        {
+            echo "AQAIR_API_KEY=${API_KEY_VAL}"
+            echo "AQAIR_API_ENDPOINT=${ENDPOINT_VAL}"
+        } >> "${ENV_FILE}"
+        echo "Imported from ${IMPORT_PATH} into ${ENV_FILE}"
+        ;;
+
+    s|S)
+        echo "Skipping env setup — make sure ${ENV_FILE} is configured before starting the logger."
+        ;;
+
+    *)
+        echo "ERROR: Invalid choice '${ENV_CHOICE}'" >&2
+        exit 1
+        ;;
+esac
+
 echo "Installing ${SERVICE_NAME} service..."
 echo "  App dir : ${APP_DIR}"
 echo "  Python  : ${VENV_PYTHON}"
