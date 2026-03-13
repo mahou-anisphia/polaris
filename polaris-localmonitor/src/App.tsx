@@ -7,6 +7,7 @@ import {
   Gauge,
   MapPin,
   RefreshCw,
+  ServerOff,
   Wind,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -30,8 +31,8 @@ interface DashboardData {
   location: Location;
   weather: OpenWeather;
   airQuality: AirQualityResponse;
-  pm: PMMonitor;
-  dht: DHTMonitor;
+  pm: PMMonitor | null;
+  dht: DHTMonitor | null;
 }
 
 function aqiLevel(aqi: number) {
@@ -81,12 +82,13 @@ function LoadingSkeleton() {
 interface DataWarning { title: string; description: string; }
 
 export default function App() {
-  const [data, setData]           = useState<DashboardData | null>(null);
-  const [loading, setLoading]     = useState(false);
-  const [fromCache, setFromCache] = useState(false);
-  const [error, setError]         = useState<string | null>(null);
-  const [warnings, setWarnings]   = useState<DataWarning[]>([]);
+  const [data, setData]               = useState<DashboardData | null>(null);
+  const [loading, setLoading]         = useState(false);
+  const [fromCache, setFromCache]     = useState(false);
+  const [error, setError]             = useState<string | null>(null);
+  const [warnings, setWarnings]       = useState<DataWarning[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [edgeNodeDown, setEdgeNodeDown] = useState(false);
 
   const fetchAll = useCallback(async (force = false) => {
     // Snapshot cache validity BEFORE fetching so we can report it after
@@ -106,9 +108,18 @@ export default function App() {
         location = await fetchLocation(force);
       } catch {
         const stale = getCachedStale<Location>(CACHE_KEYS.LOCATION);
-        if (!stale) throw new Error('Station unreachable and no cached location available');
-        newWarnings.push({ title: 'Station unreachable', description: 'Showing cached location data' });
-        location = stale;
+        if (stale) {
+          newWarnings.push({ title: 'Station unreachable', description: 'Showing cached location data' });
+          location = stale;
+        } else {
+          const lat = Number.parseFloat(import.meta.env.VITE_FALLBACK_STATION_LATITUDE ?? '');
+          const lon = Number.parseFloat(import.meta.env.VITE_FALLBACK_STATION_LONGITUDE ?? '');
+          if (!Number.isNaN(lat) && !Number.isNaN(lon)) {
+            location = { latitude: lat, longitude: lon };
+          } else {
+            throw new TypeError('Edge node unreachable and no fallback location configured');
+          }
+        }
       }
 
       const [weatherResult, airQualityResult, pmResult, dhtResult] = await Promise.allSettled([
@@ -140,28 +151,31 @@ export default function App() {
         airQuality = stale;
       }
 
-      // PM sensor
-      let pm: PMMonitor;
+      // PM sensor — non-fatal; null means edge node is offline
+      let pm: PMMonitor | null = null;
       if (pmResult.status === 'fulfilled') {
         pm = pmResult.value;
       } else {
         const stale = getCachedStale<PMMonitor>(CACHE_KEYS.PM);
-        if (!stale) throw new Error('PM sensor data unavailable and no cached data found');
-        newWarnings.push({ title: 'PM sensor unreachable', description: 'Showing cached sensor readings from earlier today' });
-        pm = stale;
+        if (stale) {
+          newWarnings.push({ title: 'PM sensor unreachable', description: 'Showing cached sensor readings from earlier today' });
+          pm = stale;
+        }
       }
 
-      // DHT sensor
-      let dht: DHTMonitor;
+      // DHT sensor — non-fatal; null means edge node is offline
+      let dht: DHTMonitor | null = null;
       if (dhtResult.status === 'fulfilled') {
         dht = dhtResult.value;
       } else {
         const stale = getCachedStale<DHTMonitor>(CACHE_KEYS.DHT);
-        if (!stale) throw new Error('DHT sensor data unavailable and no cached data found');
-        newWarnings.push({ title: 'DHT sensor unreachable', description: 'Showing cached sensor readings from earlier today' });
-        dht = stale;
+        if (stale) {
+          newWarnings.push({ title: 'DHT sensor unreachable', description: 'Showing cached sensor readings from earlier today' });
+          dht = stale;
+        }
       }
 
+      setEdgeNodeDown(pm === null && dht === null);
       setData({ location, weather, airQuality, pm, dht });
       setWarnings(newWarnings);
       setFromCache(weatherWasCached);
@@ -214,13 +228,13 @@ export default function App() {
   // ── Derived values ────────────────────────────────────────────────────────
 
   const { location, weather, airQuality, pm, dht } = data;
-  const w        = weather.weather[0];
-  const ow       = weather.main;
+  const w          = weather.weather[0];
+  const ow         = weather.main;
   const aqi        = airQuality.data.current.pollution;
-  const stationAQI = pm25ToAQI(pm.pm2_5);
-  const latDir   = location.latitude  >= 0 ? 'N' : 'S';
-  const lonDir   = location.longitude >= 0 ? 'E' : 'W';
-  const pollTime = new Date(aqi.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const stationAQI = pm === null ? null : pm25ToAQI(pm.pm2_5);
+  const latDir     = location.latitude  >= 0 ? 'N' : 'S';
+  const lonDir     = location.longitude >= 0 ? 'E' : 'W';
+  const pollTime   = new Date(aqi.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -264,6 +278,17 @@ export default function App() {
           </Button>
         </div>
 
+        {/* Edge node offline banner */}
+        {edgeNodeDown && (
+          <Alert className="rounded-xl border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+            <ServerOff className="size-4" />
+            <AlertTitle>Edge node offline</AlertTitle>
+            <AlertDescription>
+              Sensor readings are unavailable. Environmental data is sourced entirely from external APIs.
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Per-source stale-data alerts */}
         {warnings.map((w) => (
           <Alert key={w.title} variant="destructive" className="rounded-xl">
@@ -298,20 +323,22 @@ export default function App() {
                   <div className="text-xs text-muted-foreground">
                     Feels like {ow.feels_like.toFixed(1)}°C
                   </div>
-                  <div className="text-xs text-muted-foreground mt-0.5 space-y-0.5">
-                    <div>
-                      Station {dht.temperature.toFixed(1)}°C
-                      <span className={`ml-1 ${deltaClass(dht.temperature, ow.temp)}`}>
-                        ({signedDelta(dht.temperature, ow.temp)} vs API)
-                      </span>
+                  {dht !== null && (
+                    <div className="text-xs text-muted-foreground mt-0.5 space-y-0.5">
+                      <div>
+                        Station {dht.temperature.toFixed(1)}°C
+                        <span className={`ml-1 ${deltaClass(dht.temperature, ow.temp)}`}>
+                          ({signedDelta(dht.temperature, ow.temp)} vs API)
+                        </span>
+                      </div>
+                      <div>
+                        {dht.humidity.toFixed(0)}% RH
+                        <span className={`ml-1 ${deltaClass(dht.humidity, ow.humidity, 2, 10)}`}>
+                          ({signedDelta(dht.humidity, ow.humidity, 0)} vs API)
+                        </span>
+                      </div>
                     </div>
-                    <div>
-                      {dht.humidity.toFixed(0)}% RH
-                      <span className={`ml-1 ${deltaClass(dht.humidity, ow.humidity, 2, 10)}`}>
-                        ({signedDelta(dht.humidity, ow.humidity, 0)} vs API)
-                      </span>
-                    </div>
-                  </div>
+                  )}
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-y-2 gap-x-3 pt-1 border-t border-border">
@@ -348,28 +375,40 @@ export default function App() {
                 </div>
               </div>
               <div className="space-y-2 pt-1 border-t border-border">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">PM1.0</span>
-                  <span className="font-medium text-foreground">{pm.pm1_0} {pm.unit}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">PM2.5</span>
-                  <div className="flex items-center gap-2 flex-wrap justify-end">
-                    <span className="font-medium text-foreground">{pm.pm2_5} {pm.unit}</span>
-                    <span className="text-xs text-muted-foreground">AQI {stationAQI}</span>
-                    <AQIBadge value={stationAQI} />
-                  </div>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">PM10</span>
-                  <span className="font-medium text-foreground">{pm.pm10} {pm.unit}</span>
-                </div>
+                {pm !== null ? (
+                  <>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">PM1.0</span>
+                      <span className="font-medium text-foreground">{pm.pm1_0} {pm.unit}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">PM2.5</span>
+                      <div className="flex items-center gap-2 flex-wrap justify-end">
+                        <span className="font-medium text-foreground">{pm.pm2_5} {pm.unit}</span>
+                        {stationAQI !== null && (
+                          <>
+                            <span className="text-xs text-muted-foreground">AQI {stationAQI}</span>
+                            <AQIBadge value={stationAQI} />
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">PM10</span>
+                      <span className="font-medium text-foreground">{pm.pm10} {pm.unit}</span>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">Station PM sensor offline</p>
+                )}
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Measured at</span>
                   <span className="font-medium text-foreground">{pollTime}</span>
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground">Source: IQAir / AirVisual · Station: I2C 0x19</p>
+              <p className="text-xs text-muted-foreground">
+                Source: IQAir / AirVisual{pm === null ? '' : ' · Station: I2C 0x19'}
+              </p>
             </CardContent>
           </Card>
         </div>
@@ -386,84 +425,106 @@ export default function App() {
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">
                 Sensor Readings
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Temperature</span>
-                  <span className="font-semibold text-foreground">{dht.temperature.toFixed(1)} °{dht.temperature_unit}</span>
+              {edgeNodeDown ? (
+                <p className="text-sm text-muted-foreground italic">Edge node offline — no sensor data available</p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+                  {dht !== null && (
+                    <>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Temperature</span>
+                        <span className="font-semibold text-foreground">{dht.temperature.toFixed(1)} °{dht.temperature_unit}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Humidity</span>
+                        <span className="font-semibold text-foreground">{dht.humidity.toFixed(1)} {dht.humidity_unit}</span>
+                      </div>
+                    </>
+                  )}
+                  {pm !== null && (
+                    <>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">PM1.0</span>
+                        <span className="font-semibold text-foreground">{pm.pm1_0} {pm.unit}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">PM2.5</span>
+                        <span className="font-semibold text-foreground">{pm.pm2_5} {pm.unit}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">PM10</span>
+                        <span className="font-semibold text-foreground">{pm.pm10} {pm.unit}</span>
+                      </div>
+                      {stationAQI !== null && (
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Station AQI</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-semibold text-foreground">{stationAQI}</span>
+                            <AQIBadge value={stationAQI} />
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Humidity</span>
-                  <span className="font-semibold text-foreground">{dht.humidity.toFixed(1)} {dht.humidity_unit}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">PM1.0</span>
-                  <span className="font-semibold text-foreground">{pm.pm1_0} {pm.unit}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">PM2.5</span>
-                  <span className="font-semibold text-foreground">{pm.pm2_5} {pm.unit}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">PM10</span>
-                  <span className="font-semibold text-foreground">{pm.pm10} {pm.unit}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Station AQI</span>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-semibold text-foreground">{stationAQI}</span>
-                    <AQIBadge value={stationAQI} />
+              )}
+              {edgeNodeDown ? null : (
+                <p className="text-xs text-muted-foreground mt-2">
+                  {dht !== null && 'DHT11 · GPIO D4'}
+                  {dht !== null && pm !== null && <span> &nbsp;·&nbsp; </span>}
+                  {pm !== null && 'PM sensor · I2C Bus 1 · 0x19'}
+                </p>
+              )}
+            </div>
+
+            {dht !== null && (
+              <>
+                <Separator />
+
+                {/* Atmospheric section */}
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">
+                    Atmospheric
+                  </p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border">
+                          {['Metric', 'OpenWeather', 'Station', 'Δ'].map((h, i) => (
+                            <th
+                              key={h}
+                              className={`pb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide ${
+                                i === 0 ? 'text-left w-32' : 'text-right'
+                              }`}
+                            >
+                              {h}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        <tr>
+                          <td className="py-2.5 font-medium text-foreground">Temperature</td>
+                          <td className="py-2.5 text-right text-foreground">{ow.temp.toFixed(1)} °C</td>
+                          <td className="py-2.5 text-right font-semibold text-foreground">{dht.temperature.toFixed(1)} °C</td>
+                          <td className={`py-2.5 text-right font-semibold ${deltaClass(dht.temperature, ow.temp)}`}>
+                            {signedDelta(dht.temperature, ow.temp)} °C
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="py-2.5 font-medium text-foreground">Humidity</td>
+                          <td className="py-2.5 text-right text-foreground">{ow.humidity} %</td>
+                          <td className="py-2.5 text-right font-semibold text-foreground">{dht.humidity.toFixed(1)} %</td>
+                          <td className={`py-2.5 text-right font-semibold ${deltaClass(dht.humidity, ow.humidity, 2, 10)}`}>
+                            {signedDelta(dht.humidity, ow.humidity, 0)} %
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
                 </div>
-              </div>
-              <p className="text-xs text-muted-foreground mt-2">
-                DHT11 · GPIO D4 &nbsp;·&nbsp; PM sensor · I2C Bus 1 · 0x19
-              </p>
-            </div>
-
-            <Separator />
-
-            {/* Atmospheric section */}
-            <div>
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">
-                Atmospheric
-              </p>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border">
-                      {['Metric', 'OpenWeather', 'Station', 'Δ'].map((h, i) => (
-                        <th
-                          key={h}
-                          className={`pb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide ${
-                            i === 0 ? 'text-left w-32' : 'text-right'
-                          }`}
-                        >
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    <tr>
-                      <td className="py-2.5 font-medium text-foreground">Temperature</td>
-                      <td className="py-2.5 text-right text-foreground">{ow.temp.toFixed(1)} °C</td>
-                      <td className="py-2.5 text-right font-semibold text-foreground">{dht.temperature.toFixed(1)} °C</td>
-                      <td className={`py-2.5 text-right font-semibold ${deltaClass(dht.temperature, ow.temp)}`}>
-                        {signedDelta(dht.temperature, ow.temp)} °C
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="py-2.5 font-medium text-foreground">Humidity</td>
-                      <td className="py-2.5 text-right text-foreground">{ow.humidity} %</td>
-                      <td className="py-2.5 text-right font-semibold text-foreground">{dht.humidity.toFixed(1)} %</td>
-                      <td className={`py-2.5 text-right font-semibold ${deltaClass(dht.humidity, ow.humidity, 2, 10)}`}>
-                        {signedDelta(dht.humidity, ow.humidity, 0)} %
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
+              </>
+            )}
 
             <Separator />
 
@@ -492,27 +553,26 @@ export default function App() {
                     <tr>
                       <td className="py-2.5 font-medium text-foreground">AQAir</td>
                       <td className="py-2.5 text-right text-foreground">{aqi.aqius}</td>
-                      <td className="py-2.5 text-right">
-                        <AQIBadge value={aqi.aqius} />
-                      </td>
+                      <td className="py-2.5 text-right"><AQIBadge value={aqi.aqius} /></td>
                       <td className="py-2.5 text-right text-muted-foreground">—</td>
                     </tr>
-                    <tr>
-                      <td className="py-2.5 font-medium text-foreground">Station<span className="ml-1 text-xs font-normal text-muted-foreground">(PM2.5→EPA)</span></td>
-                      <td className="py-2.5 text-right font-semibold text-foreground">{stationAQI}</td>
-                      <td className="py-2.5 text-right">
-                        <AQIBadge value={stationAQI} />
-                      </td>
-                      <td className={`py-2.5 text-right font-semibold ${deltaClass(stationAQI, aqi.aqius, 10, 30)}`}>
-                        {signedDelta(stationAQI, aqi.aqius, 0)}
-                      </td>
-                    </tr>
+                    {stationAQI !== null && (
+                      <tr>
+                        <td className="py-2.5 font-medium text-foreground">Station<span className="ml-1 text-xs font-normal text-muted-foreground">(PM2.5→EPA)</span></td>
+                        <td className="py-2.5 text-right font-semibold text-foreground">{stationAQI}</td>
+                        <td className="py-2.5 text-right"><AQIBadge value={stationAQI} /></td>
+                        <td className={`py-2.5 text-right font-semibold ${deltaClass(stationAQI, aqi.aqius, 10, 30)}`}>
+                          {signedDelta(stationAQI, aqi.aqius, 0)}
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
               <p className="text-xs text-muted-foreground mt-3">
-                Station AQI derived from raw PM2.5 (µg/m³) via EPA linear interpolation.
-                Δ is positive when the station sensor reads higher pollution than AQAir reports.
+                {stationAQI === null
+                  ? 'Station AQI unavailable — edge node offline.'
+                  : 'Station AQI derived from raw PM2.5 (µg/m³) via EPA linear interpolation. Δ is positive when the station sensor reads higher pollution than AQAir reports.'}
               </p>
             </div>
 
