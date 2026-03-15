@@ -68,6 +68,8 @@ docker build \
   --build-arg VITE_HUBBLE_API_PORT=<hubble-port> \
   --build-arg VITE_STATION_API_ENDPOINT=<pi-ip-address> \
   --build-arg VITE_STATION_API_PORT=5000 \
+  --build-arg VITE_FALLBACK_STATION_LATITUDE=<lat> \
+  --build-arg VITE_FALLBACK_STATION_LONGITUDE=<lon> \
   -t polaris-localmonitor \
   .
 ```
@@ -80,6 +82,8 @@ export $(grep -v '^#' .env | xargs) && docker build \
   --build-arg VITE_HUBBLE_API_PORT \
   --build-arg VITE_STATION_API_ENDPOINT \
   --build-arg VITE_STATION_API_PORT \
+  --build-arg VITE_FALLBACK_STATION_LATITUDE \
+  --build-arg VITE_FALLBACK_STATION_LONGITUDE \
   -t polaris-localmonitor \
   .
 ```
