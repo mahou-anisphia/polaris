@@ -1,4 +1,4 @@
-_From the series Stellar Guide_
+_From the series "Stellar Guide"_
 
 # Polaris
 
