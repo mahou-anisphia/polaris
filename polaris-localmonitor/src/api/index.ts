@@ -4,11 +4,18 @@ import type { OpenWeather } from "@/types/OpenWeather";
 import type { Location, PMMonitor, DHTMonitor } from "@/types/StationAPI";
 
 const STATION_TIMEOUT_MS = 3000;
+const HUBBLE_TIMEOUT_MS = 5000;
 
 function stationBase(): string {
   const host = import.meta.env.VITE_STATION_API_ENDPOINT;
   const port = import.meta.env.VITE_STATION_API_PORT;
   return `http://${host}:${port}/polaris-sensor/api/v1`;
+}
+
+function hubbleBase(): string {
+  const host = import.meta.env.VITE_HUBBLE_API_ENDPOINT;
+  const port = import.meta.env.VITE_HUBBLE_API_PORT;
+  return `http://${host}:${port}/api/v1`;
 }
 
 export async function getStationLocation(): Promise<Location> {
@@ -37,14 +44,10 @@ export async function getOpenWeather(
   lon: number,
 ): Promise<OpenWeather> {
   const { data } = await axios.get<OpenWeather>(
-    `https://${import.meta.env.VITE_OPENWEATHER_API_ENDPOINT}/data/2.5/weather`,
+    `${hubbleBase()}/openweather/data`,
     {
-      params: {
-        lat,
-        lon,
-        appid: import.meta.env.VITE_OPENWEATHER_API_KEY,
-        units: "metric",
-      },
+      params: { lat, lon },
+      timeout: HUBBLE_TIMEOUT_MS,
     },
   );
   return data;
@@ -55,13 +58,10 @@ export async function getAirQuality(
   lon: number,
 ): Promise<AirQualityResponse> {
   const { data } = await axios.get<AirQualityResponse>(
-    `https://${import.meta.env.VITE_AQAIR_API_ENDPOINT}/v2/nearest_city`,
+    `${hubbleBase()}/aqi/data`,
     {
-      params: {
-        lat,
-        lon,
-        key: import.meta.env.VITE_AQAIR_API_KEY,
-      },
+      params: { lat, lon },
+      timeout: HUBBLE_TIMEOUT_MS,
     },
   );
   return data;
